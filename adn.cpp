@@ -136,14 +136,14 @@ vector<int> getLPS(string text){
 
 // KMP
 // Complejidad: O(n + m), donde n es el tamano del texto y m el del patron
-vector<int> kmp(string text, string pattern){
+pair<vector<int>, pair<int, int>> kmp(string text, string pattern){
     int n = text.size();
     int m = pattern.size();
 
     vector<int> lps = getLPS(pattern);
     vector<int> occurrences;
-
-    int len_prefix = 0;
+    int maxMatchLength = 0;
+    int maxMatchIndex = -1;
 
     int i = 0;
     int j = 0;
@@ -155,7 +155,13 @@ vector<int> kmp(string text, string pattern){
             j++;
         }
 
-        // Si se encontro el patron, guarda la posicion
+        // Guarda el largo máximo de coincidencia y el índice
+        if(j > maxMatchLength){
+            maxMatchLength = j;
+            maxMatchIndex = i - j;
+        }
+
+        // Si se encontró el patrón completo, guarda la posición
         if(j == m){
             occurrences.push_back(i - j);
             j = lps[j - 1];
@@ -163,11 +169,10 @@ vector<int> kmp(string text, string pattern){
 
         // Si no hay coincidencia
         else if(i < n && text[i] != pattern[j]){
-            // Si j no es 0, retrocede en el patron
+            // Si j no es 0, retrocede en el patrón
             if(j > 0){
                 j = lps[j - 1];
             }
-
             // Si j es 0, avanza en el texto
             else{
                 i++;
@@ -175,21 +180,21 @@ vector<int> kmp(string text, string pattern){
         }
     }
 
-    return occurrences;
+    return {occurrences, {maxMatchLength, maxMatchIndex}};
 }
 
 string getSequence(string filename) {
     ifstream file(filename);
     string line;
-    string sequence; 
-    string header;
+    string sequence;
+    // string header;
     
     bool first = true;
     
     while(getline(file, line)){
         if(first){
             first = false;
-            header = line;
+            // header = line;
             continue; 
         }
 
@@ -240,14 +245,14 @@ vector<pair<string, string>> getProteinsFromFile(string filename){
     return proteins;
 }
 
-string getProteins(string sequence) {
+string getProteins(string sequence){
     string protein = "";
     
     for(int i = 0; i < sequence.size(); i += 3){
         string codon = sequence.substr(i, 3);
         
         for(auto [aminoacid, codons] : aminoacids){
-            if(kmp(codons, codon).size() > 0){
+            if(kmp(codons, codon).first.size() > 0){
                 protein += aminoacid;
                 break;
             }
@@ -258,9 +263,9 @@ string getProteins(string sequence) {
 }
 
 // Traduce un codon a su aminoacido
-char codonToAminoacid(string codon) {
+char codonToAminoacid(string codon){
     for(auto [aminoacid, codons] : aminoacids) {
-        if(kmp(codons, codon).size() > 0) {
+        if(kmp(codons, codon).first.size() > 0) {
             return aminoacid[0];
         }
     }
@@ -284,9 +289,11 @@ int main(){
 
     string genomeSequence = getSequence(genomeSeqFile + ".txt");
 
-    // Parte 1, indices de aparición de cada uno de los tres genes
+    // Parte 1
+    cout << "Ocurrencias de los genes en el genoma:" << endl << endl;
+
     for(int i = 0; i < genSequences.size(); i++){
-        vector<int> occurrences = kmp(genomeSequence, genSequences[i]);
+        vector<int> occurrences = kmp(genomeSequence, genSequences[i]).first;
         cout << genFiles[i] << " ";
 
         if(occurrences.size() > 0){
@@ -302,7 +309,9 @@ int main(){
         cout << endl;
     }
 
-    // Parte 2, palíndromo mas largo en cada uno de los tres genes
+    // Parte 2
+    cout << "Regiones propensas a mutaciones (palindromos mas largos):" << endl << endl;
+
     for(int i = 0; i < genSequences.size(); i++){
         vector<int> P = manacher(genSequences[i]);
 
@@ -318,7 +327,7 @@ int main(){
 
         int inicio = (max_index - max_length) / 2;
 
-        cout << "Palindromo mas largo en " << genFiles[i] << " desde " << inicio << " hasta " << inicio + max_length - 1 << ":\n";
+        cout << "Palindromo mas largo en " << genFiles[i] << " desde " << inicio << " hasta " << inicio + max_length - 1 << ":" << endl;
         cout << "Longitud: " << max_length << endl;
         cout << "Palindromo: " << genSequences[i].substr(inicio, max_length) << endl;
         cout << endl;
@@ -330,24 +339,24 @@ int main(){
         palFile.close();
     }
 
-    // Parte 3, dado el archivo de las proteinas, el cual contiene sus secuencias de aminoacidos, encuentra en cuales secciones del virus se produce cada proteina
+    // Parte 3
+    cout << "Busqueda de proteinas en el genoma:" << endl << endl;
+    
     vector<pair<string, string>> proteins = getProteinsFromFile("seq-proteins.txt");
-    vector<int> slipperyPos;
 
-    // Convierte considerando los 3 reading frames y los guarda en un vector y archivo
+    // Convierte considerando los 3 reading frames
     vector<string> genomeProteins(3);
     for(int frame = 0; frame < 3; frame++){
         string frameSeq = genomeSequence.substr(frame);
-        slipperyPos = kmp(genomeSequence.substr(frame), "TTTAAAC");
 
         string proteinsInFrame = getProteins(frameSeq);
         genomeProteins[frame] = proteinsInFrame;
 
         // Guarda en archivo
-        ofstream frameFile;
-        frameFile.open("genome-proteins-frame-" + to_string(frame) + ".txt");
-        frameFile << proteinsInFrame;
-        frameFile.close();
+        // ofstream frameFile;
+        // frameFile.open("genome-proteins-frame-" + to_string(frame) + ".txt");
+        // frameFile << proteinsInFrame;
+        // frameFile.close();
     }
 
     for(int i = 0; i < proteins.size(); i++){
@@ -357,7 +366,7 @@ int main(){
         bool found = false;
 
         for(int frame = 0; frame < 3; frame++){
-            vector<int> occurrences = kmp(genomeProteins[frame], proteinSeq);
+            vector<int> occurrences = kmp(genomeProteins[frame], proteinSeq).first;
 
             if(occurrences.size() > 0){
                 found = true;
@@ -368,21 +377,71 @@ int main(){
                 }
 
                 cout << endl;
+                // Muestra los primeros 4 aminoacidos
+                cout << proteinSeq.substr(0, 4) << " - " << genomeSequence.substr(occurrences[0] * 3, 12) << endl;
             }
         }
 
         if(!found){
-            cout << "Proteina " << proteinName << " no encontrada en ningun reading frame" << endl;
+            int maxIndex = -1;
+            int specialFrame = -1;
+            int maxCoincidence = -1;
+            string slipperySeq = "TTTAAAC";
+
+            for(int frame = 1; frame < 3; frame++){
+                pair<vector<int>, pair<int, int>> result = kmp(genomeProteins[frame], proteinSeq);
+                vector<int> occurrences = result.first;
+                int coincidenceLength = result.second.first;
+                int coincidenceIndex = result.second.second;
+
+                if(coincidenceLength > maxCoincidence){
+                    maxCoincidence = coincidenceLength;
+                    maxIndex = coincidenceIndex;
+                    specialFrame = frame;
+                }
+            }
+
+            string lastNucleotides = genomeSequence.substr((maxIndex + maxCoincidence) * 3 - 6, 7);
+            
+            if(lastNucleotides == slipperySeq && specialFrame > 0){
+                cout << "Reading frame shift probable en secuencia " << proteinName << endl;
+                string newReadingFrame = "";
+                
+                newReadingFrame = genomeProteins[specialFrame].substr(0, maxIndex + maxCoincidence);
+                newReadingFrame += genomeProteins[specialFrame - 1].substr(maxIndex + maxCoincidence);
+
+                // cout << newReadingFrame << endl;
+
+                vector<int> newOccurrences = kmp(newReadingFrame, proteinSeq).first;
+                
+                if(newOccurrences.size() > 0){
+                    cout << "Proteina encontrada en reading frame " << specialFrame << " y " << specialFrame - 1 << endl;
+                    cout << "en las posiciones: ";
+
+                    for(int j = 0; j < newOccurrences.size(); j++){
+                        cout << newOccurrences[j] * 3 << " ";
+                    }
+
+                    cout << endl;
+                    // Muestra los primeros 4 aminoacidos
+                    cout << proteinSeq.substr(0, 4) << " - " << newReadingFrame.substr(newOccurrences[0], 12) << endl;
+                }
+            }
+
+            else{
+                cout << "Proteina " << proteinName << " no encontrada en ningun reading frame" << endl;
+            }
         }
+
+        cout << endl;
     }
 
-    // Parte 4, Compara las versiones del genoma del virus de Wuhan, 2019 vs Texas, 2020. Determina donde  difieren, y si tales diferencias resultan en aminoácidos diferentes
-    // Comparación Wuhan vs Texas
+    // Parte 4
     string wuhan = getSequence("SARS-COV-2-MN908947.3.txt");
     string texas = getSequence("SARS-COV-2-MT106054.1.txt");
     int minLen = min(wuhan.size(), texas.size());
     
-    cout << "Diferencias:" << endl;
+    cout << "Comparacion entre genomas de Wuhan (2019) y Texas (2020):" << endl << endl;
     
     for(int i = 0; i + 2 < minLen; i += 3) {
         string codonWuhan = wuhan.substr(i, 3);
@@ -392,10 +451,10 @@ int main(){
             char aminoWuhan = codonToAminoacid(codonWuhan);
             char aminoTexas = codonToAminoacid(codonTexas);
             
-            cout << " Indice: " << i << " | Wuhan: " << codonWuhan << " (" << aminoWuhan << ")" << " | Texas: " << codonTexas << " (" << aminoTexas << ")";
+            cout << "Indice: " << i << " | Wuhan: " << codonWuhan << " (" << aminoWuhan << ")" << " | Texas: " << codonTexas << " (" << aminoTexas << ")";
             
             if(aminoWuhan != aminoTexas){
-                cout << " <-- Cambio de aminoacido";
+                cout << " <- Cambio de aminoacido";
             }
 
             cout << endl;
